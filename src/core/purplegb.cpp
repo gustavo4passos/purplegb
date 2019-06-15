@@ -9,7 +9,7 @@ namespace pgb
 
 PurpleGB::PurpleGB()
 {
- 
+	memset(&m_cartridgeROM[0], 0, 0x200000);
 }
 
 auto PurpleGB::GetError() -> const std::string
@@ -32,7 +32,7 @@ auto PurpleGB::LoadROM(const char* filename) -> bool
 	}
 
 	romFile.read((char*)&m_cartridgeROM[0], 0x200000);
-
+	
 	return true;
 }
 

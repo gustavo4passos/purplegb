@@ -35,4 +35,10 @@
 _r
 *.swp
 
+# Visual studio files
+.vs
+
+# intermediate files and bin folder
+build/
+bin/
 roms/
