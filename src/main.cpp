@@ -3,7 +3,7 @@
 
 int main(int argc, char* args[])
 {
-	pgb::PurpleGB* gb = new pgb::PurpleGB;
+	pgb::PurpleGB* gb = new pgb::PurpleGB();
 
 	if (!gb->LoadROM("roms/tetris.gb"))
 	{
