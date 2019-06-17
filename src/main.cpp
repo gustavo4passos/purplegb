@@ -5,13 +5,15 @@ int main(int argc, char* args[])
 {
 	pgb::PurpleGB* gb = new pgb::PurpleGB();
 
-	if (!gb->LoadROM("roms/tetris.gb"))
+	if (!gb->LoadROM("roms/zelda.gb"))
 	{
 		std::cout << gb->GetError() << std::endl;
 	}
 	else
 	{
 		std::cout << "ROM sucessfully loaded." << std::endl;
+		std::cout << "MBC type: " << gb->CartridgeMBCType() << std::endl;
+		gb->Run();
 	}
 
 	return 0;

@@ -130,11 +130,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\core\interruptcontroller.cpp" />
     <ClCompile Include="src\core\purplegb.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\utils\logger.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\core\interruptcontroller.h" />
     <ClInclude Include="src\core\purplegb.h" />
+    <ClInclude Include="src\utils\bitmanip.h" />
     <ClInclude Include="src\utils\logger.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

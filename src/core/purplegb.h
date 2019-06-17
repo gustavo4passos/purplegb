@@ -14,6 +14,11 @@ using SIGNED_WORD = short;
 #define ERAM_BANK_SIZE 0x2000
 #define FIRST_ROM_BANK 0x4000
 
+#define LO(x) (*((BYTE*)&x)) 
+#define HI(x) (*((BYTE*)&x + 1))
+
+class InterruptController;
+
 enum class MBCType
 {
 	NONE,
@@ -29,6 +34,15 @@ enum class MBC1BankMode
 	RAM_MODE
 };
 
+struct Flags
+{
+	bool Z;
+	bool N;
+	bool H;
+	bool C;
+};
+
+
 /* 	WARNING: This class may be to big to be
 	initialized on the stack. Always initi-
 	alize it on the heap					*/
@@ -39,12 +53,26 @@ public:
 	PurpleGB();
 	auto LoadROM(const char* filename) -> bool;
 	auto GetError() -> const std::string;
+	auto CartridgeMBCType() -> const std::string;
+
+	auto Run() -> void;
 
 private:
 
 	BYTE m_cartridgeROM[0x200000];
 	BYTE m_internalROM[0x10000];
 	BYTE m_externalRAM[0x8000];
+
+	WORD m_registerAF;
+	WORD m_registerBC;
+	WORD m_registerDE;
+	WORD m_registerHL;
+	WORD m_PC;
+	WORD m_SP;
+
+	InterruptController* m_interruptController;
+
+	Flags m_flags;
 
 	std::queue<std::string> m_errorQueue;
 
@@ -64,7 +92,7 @@ private:
 	auto MBC2Intercept(WORD address, BYTE data) -> void;
 
 	auto GetMBCTypeFromCartridge() -> MBCType;
-
+	auto ExecuteNextInstruction() -> unsigned;
 };
 
 }
