@@ -2,20 +2,51 @@
 
 #include <fstream>
 #include <assert.h>
+#include "interruptcontroller.h"
 #include "../utils/logger.h"
 
 namespace pgb
 {
 
 PurpleGB::PurpleGB()
-	: m_mbcType(MBCType::NONE),
+	: m_registerAF(0x0),
+	m_registerBC(0x0),
+	m_registerDE(0x0),
+	m_registerHL(0x0),
+	m_PC(0x0),
+	m_SP(0x0),
+	m_mbcType(MBCType::UNKNOWN),
 	m_externalRAMEnabled(false),
 	m_ROMBankingEnabled(false),
-	m_currentROMBank(0x1000)
+	m_mbc1BankMode(MBC1BankMode::ROM_MODE),
+	m_currentROMBank(1),
+	m_currentRAMBank(0),
+	m_flags({ false, false, false, false })
 {
 	memset(&m_cartridgeROM[0], 0, sizeof(m_cartridgeROM));
 	memset(&m_internalROM[0], 0, sizeof(m_internalROM));
 	memset(&m_externalRAM[0], 0, sizeof(m_externalRAM));
+
+	m_interruptController = new InterruptController(this);
+}
+
+auto PurpleGB::LoadROM(const char* filename) -> bool
+{
+	std::ifstream romFile;
+	romFile.open(filename, std::fstream::binary);
+	if (!romFile.is_open())
+	{
+		m_errorQueue.push(
+			Logger::GenErrorMessage(
+				"Unable to open ROM file. File name: " + 
+					std::string(filename)));
+		return false;
+	}
+
+	romFile.read((char*)& m_cartridgeROM[0], 0x200000);
+
+	m_mbcType = GetMBCTypeFromCartridge();
+	return true;
 }
 
 auto PurpleGB::GetError() -> const std::string
@@ -27,11 +58,37 @@ auto PurpleGB::GetError() -> const std::string
 	return errorMessage;
 }
 
+auto PurpleGB::CartridgeMBCType() -> const std::string
+{
+	switch (m_mbcType)
+	{
+	case MBCType::NONE:
+		return "NONE";
+	case MBCType::MBC1:
+		return "MBC1";
+	case MBCType::MBC2:
+		return "MBC2";
+	case MBCType::MBC3:
+		return "MBC3";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+auto PurpleGB::Run() -> void
+{
+}
+
 auto PurpleGB::Load(WORD address) -> BYTE
 {
-	if (address >= 0x4000 && address <= 0x7FFF)
+	// Cartridge ROM region
+	if (address <= 0x3FFF)
 	{
-		// ROM bank address space
+		return m_cartridgeROM[address];
+	}
+	else if (address >= 0x4000 && address <= 0x7FFF)
+	{
+		// ROM bank region
 		if (m_mbcType == MBCType::NONE) return m_cartridgeROM[address];
 		else return m_cartridgeROM[m_currentROMBank * 0x4000 + address - 0x4000];
 
@@ -41,7 +98,7 @@ auto PurpleGB::Load(WORD address) -> BYTE
 		// External RAM address space
 		if (m_mbcType == MBCType::NONE)
 		{
-			LOG_WARNING("Type-0 cartridge is trying to load from external RAM.");
+			Logger::LogWarning("Type-0 cartridge is trying to load from external RAM.");
 		}
 		else
 		{
@@ -49,6 +106,11 @@ auto PurpleGB::Load(WORD address) -> BYTE
 			return m_externalRAM[EXRAM_START_ADDRESS + m_currentRAMBank * ERAM_BANK_SIZE + offset];
 		}
 
+	}
+	else if (address == INTERRUPT_ENABLE_REGISTER_ADDRESS ||
+			 address == INTERRUPT_FLAG_REGISTER_ADDRESS)
+	{
+		return m_interruptController->Load(address);
 	}
 
 	return m_internalROM[address];
@@ -62,6 +124,12 @@ auto PurpleGB::WriteByte(WORD address, BYTE data) -> void
 	if (address <= 0x7FFF)
 	{
 		MBCIntercept(address, data);
+	}
+	// Interrupt controller registerss
+	else if (address == INTERRUPT_ENABLE_REGISTER_ADDRESS ||
+			 address == INTERRUPT_FLAG_REGISTER_ADDRESS)
+	{
+		m_interruptController->Write(address, data);
 	}
 
 }
@@ -179,20 +247,9 @@ auto PurpleGB::GetMBCTypeFromCartridge() -> MBCType
 	}
 }
 
-auto PurpleGB::LoadROM(const char* filename) -> bool
+auto PurpleGB::ExecuteNextInstruction() -> unsigned
 {
-	std::ifstream romFile;
-	romFile.open(filename, std::fstream::binary);
-	if (!romFile.is_open())
-	{
-		m_errorQueue.push(ERROR_STRING("Unable to open ROM file. File name: " + filename));
-		return false;
-	}
-
-	romFile.read((char*)& m_cartridgeROM[0], 0x200000);
-
-	m_mbcType = GetMBCTypeFromCartridge();
-	return true;
+	return 4;
 }
 
 }
