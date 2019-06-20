@@ -72,6 +72,8 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>$(SolutionDir)bin\$(Configuration)-$(Platform)\</OutDir>
     <IntDir>$(SolutionDir)build\$(Configuration)-$(Platform)\</IntDir>
+    <IncludePath>C:\DevLibs\SDL2-devel-2.0.8-VC\SDL2-2.0.8\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\DevLibs\SDL2-devel-2.0.8-VC\SDL2-2.0.8\lib\x86;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)bin\$(Configuration)-$(Platform)\</OutDir>
@@ -83,9 +85,11 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <ConformanceMode>true</ConformanceMode>
+      <PreprocessorDefinitions>M_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>SDL2main.lib;SDL2.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -132,12 +136,14 @@
   <ItemGroup>
     <ClCompile Include="src\core\interruptcontroller.cpp" />
     <ClCompile Include="src\core\purplegb.cpp" />
+    <ClCompile Include="src\core\timercontroller.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\utils\logger.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\core\interruptcontroller.h" />
     <ClInclude Include="src\core\purplegb.h" />
+    <ClInclude Include="src\core\timercontroller.h" />
     <ClInclude Include="src\utils\bitmanip.h" />
     <ClInclude Include="src\utils\logger.h" />
   </ItemGroup>

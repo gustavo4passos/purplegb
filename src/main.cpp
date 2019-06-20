@@ -5,7 +5,7 @@ int main(int argc, char* args[])
 {
 	pgb::PurpleGB* gb = new pgb::PurpleGB();
 
-	if (!gb->LoadROM("roms/zelda.gb"))
+	if (!gb->LoadROM("roms/tetris.gb"))
 	{
 		std::cout << gb->GetError() << std::endl;
 	}

@@ -5,11 +5,10 @@
 namespace pgb
 {
 
-InterruptController::InterruptController(PurpleGB* emulator)
-	: m_pgbEmulator(emulator),
-	m_interruptMasterFlag(false),
-	m_interruptEnableRegister(0x00),
-	m_interruptFlagRegister(0x0)
+InterruptController::InterruptController(BYTE* IE, BYTE* IF)
+	: m_interruptMasterFlag(false),
+	m_interruptEnableRegister(IE),
+	m_interruptFlagRegister(IF)
 { }
 
 auto InterruptController::EnableInterrupts() -> void
@@ -25,20 +24,20 @@ auto InterruptController::DisableInterrupts() -> void
 auto InterruptController::RequestInterrupt(InterruptType type) -> void
 {
 	int flagBit = GetFlagBitFromIntType(type);
-	BitManip::SetBit<BYTE>(m_interruptFlagRegister, flagBit);
+	BitManip::SetBit<BYTE>(*m_interruptFlagRegister, flagBit);
 }
 
 auto InterruptController::EnableInterrupt(InterruptType type) -> void
 {
 	int flagBit = GetFlagBitFromIntType(type);
-	BitManip::SetBit<BYTE>(m_interruptEnableRegister, flagBit);
+	BitManip::SetBit<BYTE>(*m_interruptEnableRegister, flagBit);
 }
 
 auto InterruptController::ServeInterrupt(InterruptType type) -> void
 {
 	int flagBit = GetFlagBitFromIntType(type);
-	BitManip::UnsetBit<BYTE>(m_interruptEnableRegister, flagBit);
-	BitManip::UnsetBit<BYTE>(m_interruptFlagRegister, flagBit);
+	BitManip::UnsetBit<BYTE>(*m_interruptEnableRegister, flagBit);
+	BitManip::UnsetBit<BYTE>(*m_interruptFlagRegister, flagBit);
 	m_interruptMasterFlag = false;
 }
 
@@ -51,8 +50,8 @@ auto InterruptController::Write(WORD address, BYTE data) -> void
 	data &= 0b00011111;
 
 	if (address == INTERRUPT_ENABLE_REGISTER_ADDRESS)
-		m_interruptEnableRegister = data;
-	else m_interruptFlagRegister = data;
+		*m_interruptEnableRegister = data;
+	else *m_interruptFlagRegister = data;
 }
 
 auto InterruptController::Load(WORD address) -> BYTE
@@ -63,14 +62,14 @@ auto InterruptController::Load(WORD address) -> BYTE
 #endif
 
 	if (address == INTERRUPT_ENABLE_REGISTER_ADDRESS)
-		return m_interruptEnableRegister;
-	else return m_interruptFlagRegister;
+		return *m_interruptEnableRegister;
+	else return *m_interruptFlagRegister;
 }
 
 auto InterruptController::IsInterruptEnabled(InterruptType type) -> bool
 {
 	int flagBit = GetFlagBitFromIntType(type);
-	return BitManip::BitTest(m_interruptEnableRegister, flagBit);
+	return BitManip::BitTest(*m_interruptEnableRegister, flagBit);
 }
 
 
@@ -84,6 +83,12 @@ auto InterruptController::GetFlagBitFromIntType(InterruptType type) -> int
 	case InterruptType::SERIAL: return SERIAL_INT_BIT;
 	case InterruptType::JOYPAD: return JOYPAD_INT_BIT;
 	}
+
+#ifdef M_DEBUG
+	// This point should never be hit
+	assert(false);
+	return VBLANK_INT_BIT;
+#endif
 }
 
 

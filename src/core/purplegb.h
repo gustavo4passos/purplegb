@@ -10,14 +10,21 @@ using SIGNED_BYTE = char;
 using WORD		  = unsigned short;
 using SIGNED_WORD = short;
 
-#define EXRAM_START_ADDRESS 0xA000
-#define ERAM_BANK_SIZE 0x2000
-#define FIRST_ROM_BANK 0x4000
+constexpr unsigned EXRAM_START_ADDRESS	= 0xA000;
+constexpr unsigned ERAM_BANK_SIZE		= 0x2000;
+constexpr unsigned FIRST_ROM_BANK_ADD	= 0x4000;
+constexpr unsigned ROM_BANK_SIZE		= 0x4000;
+
+constexpr unsigned UPDATES_PER_SECOND = 60;
+constexpr unsigned MS_PER_UPDATE	  = 1000 / UPDATES_PER_SECOND;
+constexpr unsigned CPU_CLOCK_SPEED	  = 4194304;
+constexpr unsigned TICKS_PER_UPDATE   = CPU_CLOCK_SPEED / UPDATES_PER_SECOND;
 
 #define LO(x) (*((BYTE*)&x)) 
 #define HI(x) (*((BYTE*)&x + 1))
 
 class InterruptController;
+class TimerController;
 
 enum class MBCType
 {
@@ -42,7 +49,6 @@ struct Flags
 	bool C;
 };
 
-
 /* 	WARNING: This class may be to big to be
 	initialized on the stack. Always initi-
 	alize it on the heap					*/
@@ -51,6 +57,8 @@ class PurpleGB
 {
 public: 
 	PurpleGB();
+	~PurpleGB();
+
 	auto LoadROM(const char* filename) -> bool;
 	auto GetError() -> const std::string;
 	auto CartridgeMBCType() -> const std::string;
@@ -71,6 +79,7 @@ private:
 	WORD m_SP;
 
 	InterruptController* m_interruptController;
+	TimerController* m_timerController;
 
 	Flags m_flags;
 
@@ -84,6 +93,8 @@ private:
 	BYTE m_currentROMBank;
 	BYTE m_currentRAMBank;
 
+	bool m_running;
+
 	auto Load(WORD address) -> BYTE;
 	auto WriteByte(WORD address, BYTE data)		-> void;
 	auto MBCIntercept(WORD address, BYTE data)  -> void;
@@ -93,6 +104,7 @@ private:
 
 	auto GetMBCTypeFromCartridge() -> MBCType;
 	auto ExecuteNextInstruction() -> unsigned;
+	auto HandleInterrupts() -> unsigned;
 };
 
 }

@@ -2,7 +2,10 @@
 
 #include <fstream>
 #include <assert.h>
+#include <SDL2/SDL.h>
 #include "interruptcontroller.h"
+#include "timercontroller.h"
+#include "../utils/bitmanip.h"
 #include "../utils/logger.h"
 
 namespace pgb
@@ -21,13 +24,28 @@ PurpleGB::PurpleGB()
 	m_mbc1BankMode(MBC1BankMode::ROM_MODE),
 	m_currentROMBank(1),
 	m_currentRAMBank(0),
-	m_flags({ false, false, false, false })
+	m_flags({ false, false, false, false }),
+	m_running(false)
 {
 	memset(&m_cartridgeROM[0], 0, sizeof(m_cartridgeROM));
 	memset(&m_internalROM[0], 0, sizeof(m_internalROM));
 	memset(&m_externalRAM[0], 0, sizeof(m_externalRAM));
 
-	m_interruptController = new InterruptController(this);
+	m_interruptController = new InterruptController( 
+		&m_internalROM[INTERRUPT_ENABLE_REGISTER_ADDRESS], 
+		&m_internalROM[INTERRUPT_FLAG_REGISTER_ADDRESS]);
+
+	m_timerController = new TimerController(
+		&m_internalROM[DIV_REGISTER_ADDRESS ],
+		&m_internalROM[TIMA_REGISTER_ADDRESS],
+		&m_internalROM[TMA_REGISTER_ADDRESS ],
+		&m_internalROM[TAC_REGISTER_ADDRESS ]);
+}
+
+PurpleGB::~PurpleGB()
+{
+	delete m_interruptController;
+	delete m_timerController;
 }
 
 auto PurpleGB::LoadROM(const char* filename) -> bool
@@ -77,6 +95,35 @@ auto PurpleGB::CartridgeMBCType() -> const std::string
 
 auto PurpleGB::Run() -> void
 {
+	m_running = true;
+
+	unsigned lastTime = SDL_GetTicks();
+	unsigned lag = 0;
+	int ticksLeft = TICKS_PER_UPDATE;
+
+	while (m_running)
+	{
+		unsigned current = SDL_GetTicks();
+		unsigned elapsed = current - lastTime;
+		lastTime = current;
+		lag += elapsed;
+
+		while (lag >= MS_PER_UPDATE)
+		{
+			ticksLeft += TICKS_PER_UPDATE;
+
+			while (ticksLeft > 0)
+			{
+				unsigned nCyclesElapsed = HandleInterrupts();
+				nCyclesElapsed += ExecuteNextInstruction();
+
+				ticksLeft -= nCyclesElapsed;
+				m_timerController->UpdateTimers(nCyclesElapsed, m_interruptController);
+			}
+
+			lag -= MS_PER_UPDATE;
+		}
+	}
 }
 
 auto PurpleGB::Load(WORD address) -> BYTE
@@ -86,11 +133,18 @@ auto PurpleGB::Load(WORD address) -> BYTE
 	{
 		return m_cartridgeROM[address];
 	}
-	else if (address >= 0x4000 && address <= 0x7FFF)
+	else if (address >= FIRST_ROM_BANK_ADD && address <= 0x7FFF)
 	{
 		// ROM bank region
-		if (m_mbcType == MBCType::NONE) return m_cartridgeROM[address];
-		else return m_cartridgeROM[m_currentROMBank * 0x4000 + address - 0x4000];
+		if (m_mbcType == MBCType::NONE) 
+		{
+			return m_cartridgeROM[address];
+		}
+		else
+		{
+			unsigned offset = address - FIRST_ROM_BANK_ADD;
+			m_cartridgeROM[m_currentROMBank * ROM_BANK_SIZE + offset];
+		}
 
 	}
 	else if (address >= EXRAM_START_ADDRESS && address <= 0xBFFF)
@@ -100,12 +154,30 @@ auto PurpleGB::Load(WORD address) -> BYTE
 		{
 			Logger::LogWarning("Type-0 cartridge is trying to load from external RAM.");
 		}
+#ifdef M_DEBUG
+		else if (address > 0xA1FFF && m_mbcType == MBCType::MBC2)
+		{
+			Logger::LogWarning("MBC2 cartridge is trying to read memory from 0xA1FFF+");
+		}
+#endif
 		else
 		{
 			WORD offset = address - EXRAM_START_ADDRESS;
-			return m_externalRAM[EXRAM_START_ADDRESS + m_currentRAMBank * ERAM_BANK_SIZE + offset];
+			return m_externalRAM[m_currentRAMBank * ERAM_BANK_SIZE + offset];
 		}
 
+	}
+	// ECHO RAM
+	// Nintendo official GB programming manual says access to this area
+	// is forbidden, but if some sassy game try to load from here, I won't
+	// tell them
+	else if (address >= 0xE000 && address <= 0xFDFF)
+	{
+#ifdef M_DEBUG
+		Logger::LogWarning("Game is trying to load from ECHO memory.");
+#endif
+		WORD echoOffset = address - 0xE000;
+		return m_internalROM[0xC000 + echoOffset];
 	}
 	else if (address == INTERRUPT_ENABLE_REGISTER_ADDRESS ||
 			 address == INTERRUPT_FLAG_REGISTER_ADDRESS)
@@ -118,12 +190,27 @@ auto PurpleGB::Load(WORD address) -> BYTE
 
 auto PurpleGB::WriteByte(WORD address, BYTE data) -> void
 {
-	// Write requests to this are of the address space
+	// Write requests to this area of the address space
 	// is intercepted by the MBC controller, and are 
-	// used to control RAM banking
+	// used to control RAM and ROM banking
 	if (address <= 0x7FFF)
 	{
 		MBCIntercept(address, data);
+	}
+	else if (address >= EXRAM_START_ADDRESS && address <= 0xBFFF)
+	{
+		// MBC2 ram slots only have 4 bits each
+		if (m_mbcType == MBCType::MBC2)
+		{
+			data &= 0b1111;
+		}
+
+		unsigned offset = address - EXRAM_START_ADDRESS;
+		m_externalRAM[ERAM_BANK_SIZE * m_currentRAMBank + offset] = data;
+	}
+	else if (address >= 0xE000 && address <= 0XFDFF)
+	{
+		// ECHO ram. Access is forbidden
 	}
 	// Interrupt controller registerss
 	else if (address == INTERRUPT_ENABLE_REGISTER_ADDRESS ||
@@ -170,6 +257,7 @@ auto PurpleGB::MBC1Intercept(WORD address, BYTE data) -> void
 		bankNumber = bankNumber == 0 ? 1 : bankNumber;
 		m_currentROMBank = (m_currentROMBank & 0b11100000) | bankNumber;
 	}
+	// RAM bank number OR Upper bits of ROM bank number
 	else if (address >= 0x4000 && address <= 0x5FFF)
 	{
 		if (m_mbc1BankMode == MBC1BankMode::RAM_MODE)
@@ -201,8 +289,9 @@ auto PurpleGB::MBC2Intercept(WORD address, BYTE data) -> void
 	// RAM Enable/Disable
 	if (address <= 0x1FFF)
 	{
-		WORD toggle = (address & 0xA0) >> 8;
-		if (toggle == 0b0)
+		// The first bit of the upper address byte must be 0
+		// to enable/ disable external RAM
+		if (!BitManip::BitTest(address, 8))
 		{
 			m_externalRAMEnabled = !m_externalRAMEnabled;
 		}
@@ -210,9 +299,17 @@ auto PurpleGB::MBC2Intercept(WORD address, BYTE data) -> void
 	// ROM Bank selection
 	else if (address >= 0x2000 && address <= 0x3FFF)
 	{
-		WORD enableSelection = (address & 0xA0) >> 8;
-		if (enableSelection == 0b1)
+		// The first bit of the upper address byte must be 1
+		// to enable/ disable external RAM
+		if (BitManip::BitTest(address, 8))
 		{
+			if (data == 0x0)
+			{
+				data = 1;
+#ifdef M_DEBUG
+				Logger::LogWarning("MBC2 cartridge is trying to select bank 0. Replacing it with 1");
+#endif
+			}
 			m_currentROMBank = data & 0x15;
 		}
 	}
@@ -250,6 +347,11 @@ auto PurpleGB::GetMBCTypeFromCartridge() -> MBCType
 auto PurpleGB::ExecuteNextInstruction() -> unsigned
 {
 	return 4;
+}
+
+auto PurpleGB::HandleInterrupts() -> unsigned
+{
+	return 0;
 }
 
 }

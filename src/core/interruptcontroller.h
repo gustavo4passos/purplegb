@@ -31,7 +31,7 @@ enum class InterruptType
 class InterruptController
 {
 public:
-	explicit InterruptController(PurpleGB* emulator);
+	explicit InterruptController(BYTE* IE, BYTE* IF);
 
 	auto EnableInterrupts() -> void;
 	auto DisableInterrupts() -> void;
@@ -47,10 +47,8 @@ public:
 
 private:
 	bool m_interruptMasterFlag;
-	BYTE m_interruptEnableRegister;
-	BYTE m_interruptFlagRegister;
-
-	PurpleGB* m_pgbEmulator;
+	BYTE* m_interruptEnableRegister;
+	BYTE* m_interruptFlagRegister;
 
 	auto GetFlagBitFromIntType(InterruptType type) -> int;
 };
