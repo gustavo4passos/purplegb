@@ -1,2 +1,2 @@
 # purplegb
-A Nintendo GameBoy Emulator
+A Nintendo GameBoy Emulator (Work in progress)
